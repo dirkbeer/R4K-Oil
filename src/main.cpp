@@ -12,7 +12,7 @@
 #include "app.h"
 
 /** Bluetooth broadcast name */
-char g_ble_dev_name[10] = "R4K-Hum";
+char g_ble_dev_name[10] = "RAK-Hum";
 /** Sensor corrections */
 static float temperature_correction = 0.0;
 static float humidity_correction = -2.75;  // two sensors checked using 72% Boveda packs
@@ -45,7 +45,7 @@ void setup_app(void)
  */
 bool init_app(void)
 {
-  API_LOG("APP", "R4K-Oil started");
+  API_LOG("APP", "RAK-Hum started");
   SHTC3_Status_TypeDef shtc3_status;
   bool init_result;
 
