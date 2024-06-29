@@ -12,7 +12,10 @@
 #include "app.h"
 
 /** Bluetooth broadcast name */
-char g_ble_dev_name[10] = "R4K-Oil";
+char g_ble_dev_name[10] = "R4K-Hum";
+/** Sensor corrections */
+static float temperature_correction = 0.0;
+static float humidity_correction = -2.75;  // two sensors checked using 72% Boveda packs
 /** LoRa packet data */
 lora_data_s oil_lora_data;
 /** SHTC3 Air temp/humidity */
@@ -48,9 +51,6 @@ bool init_app(void)
 
   pinMode(WB_IO2, OUTPUT);
   digitalWrite(WB_IO2, HIGH);
-  pinMode(TRIG_PIN, OUTPUT);
-  digitalWrite(TRIG_PIN, LOW);
-  pinMode(ECHO_PIN, INPUT);
   
   Wire.begin();
   shtc3_status = shtc3.begin();
@@ -90,7 +90,6 @@ void app_event_handler(void)
 
     read_batt_lora();
     read_shtc3();
-    read_ultra();
 
     send_lora_data((uint8_t*)&oil_lora_data, sizeof(lora_data_s));
 
@@ -145,9 +144,8 @@ void read_shtc3(void)
 
   if(shtc3.passIDcrc) 
   {
-    /** -2 Adjustment for MCU/Board heat */
-    uint8_t temp = static_cast<uint8_t>(shtc3.toDegC()-2);
-    uint8_t humi = static_cast<uint8_t>(shtc3.toPercent()-2);
+    uint8_t temp = static_cast<uint8_t>(4.0 * (shtc3.toDegC() + temperature_correction)); // [0, 64] with 0.25 Celsius resolution
+    uint8_t humi = static_cast<uint8_t>(2.0 * (shtc3.toPercent() + humidity_correction)); // [0,100] with 0.5 % resolution
     oil_lora_data.temp = temp;
     oil_lora_data.humi = humi;
     std::string disp = std::to_string(temp) + "C " + std::to_string(humi) + "%";
@@ -155,43 +153,6 @@ void read_shtc3(void)
   } else {
     API_LOG("SHTC3", "Failed checksum");
   }
-}
-
-/**
- * @brief Get reading from HC-SR04
- * 
- */
-void read_ultra(void)
-{
-  API_LOG("HC-SR04", "Reading");
-  uint32_t time;
-  uint32_t mm;
-  uint32_t cm;
-  std::string level_disp;
-  /** velocity of sound = 331.6+0.6*25℃(m/s) */
-  float sound_vel = 331.6 + 0.6 * oil_lora_data.temp;
-  /** max measure distance is 4m,the velocity of sound is 331.6m/s in 0℃,TIME_OUT=4*2/331.6*1000000=24125us */
-  uint16_t time_out = 4 * 2 / sound_vel * 1000000;
-  float ratio = sound_vel / 1000 / 2;
-
-  digitalWrite(TRIG_PIN, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIG_PIN, LOW);
-
-  time = pulseIn(ECHO_PIN, HIGH); 
-  time = time * 0.7726;
-
-  if(time < time_out)
-  {
-    mm = time * ratio;
-    cm = mm / 10;
-  } else {
-    cm = 0;
-  }
-
-  oil_lora_data.level = cm;
-  level_disp = std::to_string(cm) + "cm";
-  API_LOG("HC-SR04", level_disp.c_str());
 }
 
 /**
